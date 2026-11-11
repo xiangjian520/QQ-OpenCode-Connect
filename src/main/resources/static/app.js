@@ -388,19 +388,31 @@ function populateOpenCodeSelects() {
   if (!modelSelect) return;
   const configuredProvider = state.openCodeSettings?.providerId || '';
   const configuredModel = state.openCodeSettings?.modelId || '';
-  modelSelect.innerHTML = '<option value="">跟随 OpenCode 默认</option>' + state.models.map(model => {
+  modelSelect.innerHTML = '<option value="">跟随 OpenCode 默认</option>' + allOpenCodeModels().map(model => {
     const value = `${model.providerId}|${model.id}`;
     const selected = model.providerId === configuredProvider && model.id === configuredModel;
-    return `<option value="${esc(value)}" ${selected ? 'selected' : ''}>${esc(model.label)}</option>`;
+    const label = model.custom ? `[自定义] ${model.name || model.label} · ${model.label}` : model.label;
+    return `<option value="${esc(value)}" ${selected ? 'selected' : ''}>${esc(label)}</option>`;
   }).join('');
   renderOpenCodeVariants();
+}
+
+function allOpenCodeModels() {
+  const merged = new Map();
+  for (const model of state.models || []) {
+    merged.set(`${model.providerId}|${model.id}`, model);
+  }
+  for (const model of state.openCodeSettings?.customModels || []) {
+    merged.set(`${model.providerId}|${model.id}`, model);
+  }
+  return [...merged.values()];
 }
 
 function renderOpenCodeVariants() {
   const select = $('#opencode-variant');
   if (!select) return;
   const [provider, id] = ($('#opencode-model').value || '').split('|');
-  const model = state.models.find(item => item.providerId === provider && item.id === id);
+  const model = allOpenCodeModels().find(item => item.providerId === provider && item.id === id);
   const current = state.openCodeSettings?.variant || '';
   select.innerHTML = '<option value="">模型默认</option>' + (model?.variants || []).map(variant =>
     `<option value="${esc(variant)}" ${variant === current ? 'selected' : ''}>${esc(variantLabel(variant))}</option>`
@@ -427,6 +439,73 @@ function renderOpenCode() {
   $('#opencode-base-url').textContent = connection.baseUrl || '—';
   $('#opencode-active-default').textContent = data.activeDefaultModel?.label || '未配置';
   populateOpenCodeSelects();
+  renderCustomModels();
+}
+
+function renderCustomModels() {
+  const models = state.openCodeSettings?.customModels || [];
+  $('#custom-model-count').textContent = models.length;
+  $('#custom-model-list').innerHTML = models.length ? models.map(model => `
+    <div class="custom-model-row">
+      <span class="session-copy"><strong>${esc(model.name || model.label)}</strong><small>${esc(model.providerId)} / ${esc(model.id)} · ${esc((model.variants || []).join(', ') || '模型默认强度')}</small></span>
+      <span class="custom-model-actions">
+        <button class="ghost small use-custom-model" data-provider="${esc(model.providerId)}" data-model="${esc(model.id)}" data-variants="${esc((model.variants || []).join(','))}">设为默认</button>
+        <button class="ghost small danger delete-custom-model" data-provider="${esc(model.providerId)}" data-model="${esc(model.id)}">删除</button>
+      </span>
+    </div>`).join('') : '<div class="empty">还没有自定义模型。</div>';
+  $$('.use-custom-model').forEach(button => button.addEventListener('click', () => useCustomModel(button)));
+  $$('.delete-custom-model').forEach(button => button.addEventListener('click', () => deleteCustomModel(button)));
+}
+
+async function useCustomModel(button) {
+  const [providerId, modelId] = [button.dataset.provider, button.dataset.model];
+  const variants = (button.dataset.variants || '').split(',').filter(Boolean);
+  const variant = variants.includes('none') ? 'none' : '';
+  try {
+    state.openCodeSettings = await api('/api/ui/opencode/settings', {
+      method: 'PUT', body: JSON.stringify({providerId, modelId, variant})
+    });
+    renderOpenCode();
+    toast('已设为默认模型');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function saveCustomModel(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const variants = form.elements.variants.value.split(/[\s,，]+/).map(value => value.trim()).filter(Boolean);
+  const body = {
+    displayName: form.elements.displayName.value.trim(),
+    providerId: form.elements.providerId.value.trim(),
+    modelId: form.elements.modelId.value.trim(),
+    variants
+  };
+  try {
+    state.openCodeSettings = await api('/api/ui/opencode/custom-models', {method: 'POST', body: JSON.stringify(body)});
+    renderOpenCode();
+    form.reset();
+    $('#custom-model-message').textContent = '已保存';
+    toast('自定义模型已保存');
+  } catch (error) {
+    $('#custom-model-message').textContent = error.message;
+    toast(error.message, true);
+  }
+}
+
+async function deleteCustomModel(button) {
+  if (!confirm(`确认删除自定义模型 ${button.dataset.provider}/${button.dataset.model}？`)) return;
+  try {
+    state.openCodeSettings = await api('/api/ui/opencode/custom-models/delete', {
+      method: 'POST',
+      body: JSON.stringify({providerId: button.dataset.provider, modelId: button.dataset.model})
+    });
+    renderOpenCode();
+    toast('自定义模型已删除');
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 async function saveOpenCode(event) {
@@ -625,6 +704,7 @@ $('#toggle-onebot-token').addEventListener('click', () => {
   $('#toggle-onebot-token').textContent = input.type === 'password' ? '显示' : '隐藏';
 });
 $('#opencode-form').addEventListener('submit', saveOpenCode);
+$('#custom-model-form').addEventListener('submit', saveCustomModel);
 $('#opencode-model').addEventListener('change', renderOpenCodeVariants);
 $$('.asset-tabs button').forEach(button => button.addEventListener('click', () => {
   state.gallery = button.dataset.gallery;

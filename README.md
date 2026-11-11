@@ -10,6 +10,7 @@
 - 群聊必须 @Bot，私聊和群聊使用双重白名单
 - OneBot Token、白名单、管理员和 @Bot 规则可直接在网页端维护
 - OpenCode 默认模型与思考强度拥有独立设置页
+- 可自定义 Provider/Model、显示名称和支持的思考强度，并提供给网页聊天与 QQ `/模型`
 - 消息去重、单会话串行任务队列、长回复自动分片
 - 默认使用模型 `none` 思考强度，优先回复速度
 - 管理员私聊可临时开启 `qq-code` Agent，30 分钟自动关闭
@@ -191,6 +192,12 @@ extra_hosts:
 - 数据库连接地址
 
 OneBot Token 首次从 `.env` 的 `ONEBOT_TOKEN` 初始化；在网页端保存后以数据库值为准。修改 Token 会立即作用于新的 WebSocket 握手，NapCat 需要同步更新。
+
+### 自定义模型
+
+在“OpenCode 模型”页面填写 Provider ID、Model ID、显示名称和可选思考强度，即可把 OpenCode 模型目录中未自动列出的模型加入选择器。支持的自定义思考强度为 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。
+
+自定义模型会被网页聊天、网页默认模型、对话模型切换和 QQ `/模型` 命令共同使用。项目只保存模型标识，不保存 Provider API Key；对应 Provider 仍需先在 OpenCode 容器中完成配置和认证。
 
 默认数据库监听 `127.0.0.1:3307`，避免与宿主机已有 MySQL 的 `3306` 冲突。使用外部 MySQL 时，将 `.env` 的 `MYSQL_MODE` 改为 `external` 并修改 `DB_URL`。
 

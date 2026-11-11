@@ -11,6 +11,7 @@ import com.xiangjian.qqbot.repository.JobRepository;
 import com.xiangjian.qqbot.repository.MessageRepository;
 import com.xiangjian.qqbot.service.ChatOrchestrator;
 import com.xiangjian.qqbot.service.EntertainmentService;
+import com.xiangjian.qqbot.service.OpenCodeCustomModelService;
 import com.xiangjian.qqbot.service.SettingsService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -41,6 +42,7 @@ public class ApiController {
     private final JobRepository jobs;
     private final SettingsService settings;
     private final EntertainmentService entertainment;
+    private final OpenCodeCustomModelService customModels;
     private final OpenCodeClient openCode;
     private final OneBotConnectionRegistry oneBot;
     private final UiEventHub events;
@@ -52,6 +54,7 @@ public class ApiController {
                          JobRepository jobs,
                          SettingsService settings,
                          EntertainmentService entertainment,
+                         OpenCodeCustomModelService customModels,
                          OpenCodeClient openCode,
                          OneBotConnectionRegistry oneBot,
                          UiEventHub events,
@@ -62,6 +65,7 @@ public class ApiController {
         this.jobs = jobs;
         this.settings = settings;
         this.entertainment = entertainment;
+        this.customModels = customModels;
         this.openCode = openCode;
         this.oneBot = oneBot;
         this.events = events;
@@ -133,7 +137,7 @@ public class ApiController {
 
     @GetMapping("/models")
     public List<Map<String, Object>> models() {
-        return openCode.listModels().stream().map(this::modelView).toList();
+        return customModels.listAll().stream().map(this::modelView).toList();
     }
 
     @GetMapping("/onebot/settings")
@@ -169,6 +173,7 @@ public class ApiController {
     @GetMapping("/opencode/settings")
     public Map<String, Object> openCodeSettings() {
         Map<String, Object> result = new LinkedHashMap<>(settings.openCodeSettings());
+        result.put("customModels", customModels.customModels().stream().map(this::modelView).toList());
         OpenCodeModels.Info info = openCode.info();
         result.put("connection", Map.of(
                 "healthy", info.healthy(),
@@ -194,6 +199,34 @@ public class ApiController {
         return openCodeSettings();
     }
 
+    @PostMapping("/opencode/custom-models")
+    public Map<String, Object> saveCustomModel(@Valid @RequestBody CustomModelRequest request) {
+        OpenCodeModels.Model saved = customModels.save(
+                request.providerId(), request.modelId(), request.displayName(), request.variants());
+        audit.record("web-admin", "opencode-custom-model-save", saved.label(), saved.variants().toString());
+        events.log("INFO", "已保存自定义模型: " + saved.label());
+        events.publish("opencode-settings-changed", Map.of("providerId", saved.providerId(), "modelId", saved.id()));
+        Map<String, Object> result = openCodeSettings();
+        result.put("savedModel", modelView(saved));
+        return result;
+    }
+
+    @PostMapping("/opencode/custom-models/delete")
+    public Map<String, Object> deleteCustomModel(@Valid @RequestBody CustomModelDelete request) {
+        boolean removed = customModels.delete(request.providerId(), request.modelId());
+        if (removed && request.providerId().equals(settings.defaultProviderId())
+                && request.modelId().equals(settings.defaultModelId())) {
+            settings.updateOpenCodeDefaults("", "", settings.defaultValueVariant());
+        }
+        audit.record("web-admin", "opencode-custom-model-delete", request.providerId() + "/" + request.modelId(),
+                removed ? "deleted" : "not-found");
+        events.log("INFO", "已删除自定义模型: " + request.providerId() + "/" + request.modelId());
+        events.publish("opencode-settings-changed", Map.of("deleted", removed));
+        Map<String, Object> result = openCodeSettings();
+        result.put("deleted", removed);
+        return result;
+    }
+
     @GetMapping("/entertainment")
     public Map<String, Object> entertainment() {
         return entertainment.overview();
@@ -208,10 +241,7 @@ public class ApiController {
     @PostMapping("/conversations/{key}/model")
     public Map<String, Object> updateModel(@PathVariable String key, @RequestBody ModelUpdate request) {
         Conversation conversation = requireConversation(key);
-        OpenCodeModels.Model model = openCode.listModels().stream()
-                .filter(candidate -> candidate.providerId().equals(request.providerId())
-                        && candidate.id().equals(request.modelId()))
-                .findFirst()
+        OpenCodeModels.Model model = customModels.find(request.providerId(), request.modelId())
                 .orElseThrow(() -> new IllegalArgumentException("模型不存在或当前不可用"));
         String variant = model.supports(request.variant()) ? request.variant() : null;
         conversations.updateModel(key, model.providerId(), model.id(), variant);
@@ -227,7 +257,7 @@ public class ApiController {
     @PostMapping("/conversations/{key}/variant")
     public Map<String, Object> updateVariant(@PathVariable String key, @RequestBody VariantUpdate request) {
         Conversation conversation = requireConversation(key);
-        List<OpenCodeModels.Model> models = openCode.listModels();
+        List<OpenCodeModels.Model> models = customModels.listAll();
         OpenCodeModels.Model model;
         if (conversation.modelProvider() == null || conversation.modelId() == null) {
             model = openCode.defaultModel()
@@ -310,14 +340,7 @@ public class ApiController {
     }
 
     private Map<String, Object> modelView(OpenCodeModels.Model model) {
-        return Map.of(
-                "id", model.id(),
-                "modelId", model.modelId(),
-                "providerId", model.providerId(),
-                "name", model.name(),
-                "variants", model.variants(),
-                "label", model.label()
-        );
+        return customModels.view(model);
     }
 
     public record ChatRequest(@NotBlank String text) {}
@@ -335,6 +358,15 @@ public class ApiController {
     ) {}
 
     public record OpenCodeDefaults(String providerId, String modelId, String variant) {}
+
+    public record CustomModelRequest(
+            @NotBlank String providerId,
+            @NotBlank String modelId,
+            String displayName,
+            List<String> variants
+    ) {}
+
+    public record CustomModelDelete(@NotBlank String providerId, @NotBlank String modelId) {}
 
     public record EntertainmentRun(@NotBlank String command) {}
 }

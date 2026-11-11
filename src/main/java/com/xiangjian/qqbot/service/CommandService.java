@@ -35,6 +35,7 @@ public class CommandService {
     private final JobRepository jobs;
     private final SettingsService settings;
     private final PermissionService permissions;
+    private final OpenCodeCustomModelService customModels;
     private final OpenCodeClient openCode;
     private final OneBotGateway oneBot;
     private final OneBotConnectionRegistry oneBotRegistry;
@@ -47,6 +48,7 @@ public class CommandService {
                           JobRepository jobs,
                           SettingsService settings,
                           PermissionService permissions,
+                          OpenCodeCustomModelService customModels,
                           OpenCodeClient openCode,
                           OneBotGateway oneBot,
                           OneBotConnectionRegistry oneBotRegistry,
@@ -58,6 +60,7 @@ public class CommandService {
         this.jobs = jobs;
         this.settings = settings;
         this.permissions = permissions;
+        this.customModels = customModels;
         this.openCode = openCode;
         this.oneBot = oneBot;
         this.oneBotRegistry = oneBotRegistry;
@@ -199,7 +202,7 @@ public class CommandService {
     private void model(InboundMessage message, Conversation conversation, String args) {
         List<OpenCodeModels.Model> models;
         try {
-            models = openCode.listModels();
+            models = customModels.listAll();
         } catch (RuntimeException ex) {
             reply(message, "读取模型失败：" + ex.getMessage());
             return;
@@ -274,7 +277,7 @@ public class CommandService {
             return;
         }
         if (conversation.modelProvider() != null && conversation.modelId() != null) {
-            OpenCodeModels.Model currentModel = openCode.listModels().stream()
+            OpenCodeModels.Model currentModel = customModels.listAll().stream()
                     .filter(model -> model.providerId().equals(conversation.modelProvider())
                             && model.id().equals(conversation.modelId()))
                     .findFirst().orElse(null);

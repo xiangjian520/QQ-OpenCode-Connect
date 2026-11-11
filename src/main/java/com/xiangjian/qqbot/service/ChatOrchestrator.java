@@ -43,6 +43,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
     private final JobRepository jobs;
     private final SettingsService settings;
     private final PermissionService permissions;
+    private final OpenCodeCustomModelService customModels;
     private final EntertainmentService entertainment;
     private final CommandService commands;
     private final OpenCodeClient openCode;
@@ -59,6 +60,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
                             JobRepository jobs,
                             SettingsService settings,
                             PermissionService permissions,
+                            OpenCodeCustomModelService customModels,
                             EntertainmentService entertainment,
                             CommandService commands,
                             OpenCodeClient openCode,
@@ -72,6 +74,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
         this.jobs = jobs;
         this.settings = settings;
         this.permissions = permissions;
+        this.customModels = customModels;
         this.entertainment = entertainment;
         this.commands = commands;
         this.openCode = openCode;
@@ -290,13 +293,11 @@ public class ChatOrchestrator implements InboundMessageHandler {
         String configuredProvider = settings.defaultProviderId();
         String configuredModel = settings.defaultModelId();
         OpenCodeModels.Model model = null;
+        boolean customModel = false;
         if (configuredProvider != null && !configuredProvider.isBlank()
                 && configuredModel != null && !configuredModel.isBlank()) {
-            model = openCode.listModels().stream()
-                    .filter(candidate -> candidate.providerId().equals(configuredProvider)
-                            && candidate.id().equals(configuredModel))
-                    .findFirst()
-                    .orElse(null);
+            model = customModels.find(configuredProvider, configuredModel).orElse(null);
+            customModel = model != null && customModels.isCustom(model);
             if (model == null) {
                 events.log("WARN", "网页端设置的默认模型不可用: " + configuredProvider + "/" + configuredModel);
             }
@@ -308,8 +309,9 @@ public class ChatOrchestrator implements InboundMessageHandler {
         String preferredVariant = settings.defaultValueVariant();
         String variant = conversation.modelVariant();
         if (variant == null || !model.supports(variant)) {
-            if (preferredVariant != null && !preferredVariant.isBlank() && !model.supports(preferredVariant)) {
-                model = openCode.listModels().stream()
+            if (!customModel && preferredVariant != null && !preferredVariant.isBlank()
+                    && !model.supports(preferredVariant)) {
+                model = customModels.listAll().stream()
                         .filter(candidate -> candidate.enabledOrAssumed() && candidate.supports(preferredVariant))
                         .findFirst()
                         .orElse(model);
