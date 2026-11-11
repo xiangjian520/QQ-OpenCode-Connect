@@ -1,0 +1,49 @@
+name: qq-opencode-connect
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: qqbot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: qqbot
+      MYSQL_USER: ${DB_USERNAME:-qqbot}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  opencode:
+    image: sbx/opencode@sha256:947ace517f46325a78b68b30430d80150d25acec8e40e9636ca2d4dc974b4e88
+    container_name: qqbot-opencode
+    command: ["serve", "--hostname", "0.0.0.0", "--port", "4096"]
+    restart: unless-stopped
+    environment:
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?Set OPENCODE_SERVER_PASSWORD in .env}
+      OPENCODE_DISABLE_AUTOUPDATE: "1"
+    ports:
+      - "127.0.0.1:4096:4096"
+    volumes:
+      - opencode-data:/home/agent/.local/share/opencode
+      - opencode-config:/home/agent/.config/opencode
+      - ./docker/opencode/opencode.json:/home/agent/.config/opencode/opencode.json:ro
+      - ${OPENCODE_WORKSPACE:-./agent-workspace}:/home/agent/workspace
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u \"$${OPENCODE_SERVER_USERNAME:-opencode}:$$OPENCODE_SERVER_PASSWORD\" http://127.0.0.1:4096/api/info >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  mysql-data:
+  opencode-data:
+  opencode-config:

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 · QQ-OpenCode-Connect</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="login-page">
+  <div class="petal-field" aria-hidden="true">
+    <span>🌸</span><span>✿</span><span>🌸</span><span>❀</span><span>🌸</span><span>✿</span>
+  </div>
+  <main class="login-shell">
+    <section class="login-art">
+      <div class="mascot">
+        <svg viewBox="0 0 280 280" role="img" aria-label="樱花精灵插画">
+          <defs>
+            <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7b3c9"/><stop offset="1" stop-color="#bda4ff"/></linearGradient>
+            <linearGradient id="dress" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff8fb"/><stop offset="1" stop-color="#ffd7e6"/></linearGradient>
+          </defs>
+          <circle cx="140" cy="135" r="104" fill="#fff8fc" opacity=".75"/>
+          <path d="M52 242c15-73 52-105 88-105s73 32 88 105Z" fill="url(#dress)"/>
+          <path d="M89 113c0-58 26-83 52-83s51 26 51 83c0 55-23 91-51 91s-52-36-52-91Z" fill="url(#hair)"/>
+          <ellipse cx="140" cy="126" rx="42" ry="48" fill="#fff4ef"/>
+          <path d="M94 99c12-39 29-54 48-54 22 0 39 17 48 53-18-12-34-16-48-16-17 0-32 5-48 17Z" fill="#e796b5"/>
+          <ellipse cx="124" cy="128" rx="5" ry="7" fill="#674b67"/>
+          <ellipse cx="156" cy="128" rx="5" ry="7" fill="#674b67"/>
+          <circle cx="126" cy="126" r="1.8" fill="white"/><circle cx="158" cy="126" r="1.8" fill="white"/>
+          <path d="M132 146q8 7 16 0" stroke="#c76f8f" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <circle cx="110" cy="144" r="8" fill="#ffabc4" opacity=".3"/><circle cx="170" cy="144" r="8" fill="#ffabc4" opacity=".3"/>
+          <g fill="#ffadc8"><circle cx="78" cy="86" r="11"/><circle cx="68" cy="76" r="9"/><circle cx="88" cy="72" r="9"/><circle cx="210" cy="84" r="10"/><circle cx="220" cy="74" r="8"/></g>
+          <circle cx="79" cy="81" r="4" fill="#fff1a8"/><circle cx="214" cy="80" r="4" fill="#fff1a8"/>
+        </svg>
+      </div>
+      <p class="eyebrow">SAKURA × OPENCODE</p>
+      <h1>让每一次对话<br>都像春日来信</h1>
+      <p>QQ 消息、OpenCode 会话与运行状态，在同一个治愈系控制台里安静连接。</p>
+    </section>
+
+    <section class="login-card glass">
+      <div class="brand-mark"><img src="/favicon.svg" alt=""><span>QQ-OpenCode-Connect</span></div>
+      <h2>欢迎回来</h2>
+      <p class="muted">请输入管理台账号继续。</p>
+      <div id="login-message" class="notice" role="status"></div>
+      <form method="post" action="/login" class="stack">
+        <label>用户名<input name="username" autocomplete="username" required autofocus></label>
+        <label>密码<input type="password" name="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">进入控制台</button>
+      </form>
+      <p class="tiny muted">默认凭据来自 <code>.env</code>，请勿直接暴露到公网。</p>
+    </section>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

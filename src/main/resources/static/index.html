@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fff7fb">
+  <title>QQ-OpenCode-Connect</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="app-page">
+  <div class="petal-field compact" aria-hidden="true">
+    <span>🌸</span><span>✿</span><span>🌸</span><span>❀</span><span>🌸</span><span>✿</span>
+  </div>
+  <div class="app-shell">
+    <aside class="sidebar glass">
+      <div class="brand-mark">
+        <img src="/favicon.svg" alt="">
+        <div><strong>QQ × OpenCode</strong><small>sakura console</small></div>
+      </div>
+      <nav class="nav" aria-label="主导航">
+        <button data-view="overview" class="active"><span>⌂</span>总览</button>
+        <button data-view="chat"><span>✉</span>网页聊天</button>
+        <button data-view="sessions"><span>◌</span>会话记录</button>
+        <button data-view="settings"><span>⚙</span>运行设置</button>
+        <button data-view="logs"><span>≡</span>日志与审计</button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="theme-toggle" class="ghost">切换深色</button>
+        <button id="logout" class="ghost">退出登录</button>
+        <small>Java 25 · OpenCode v2</small>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar glass">
+        <div>
+          <p class="eyebrow">SAKURA CONSOLE</p>
+          <h1 id="view-title">运行总览</h1>
+        </div>
+        <div class="live-pill"><i id="live-dot"></i><span id="live-text">正在连接</span></div>
+      </header>
+
+      <section id="view-overview" class="view active">
+        <div class="hero glass">
+          <div>
+            <p class="eyebrow">GOOD AFTERNOON</p>
+            <h2>你的 QQ 与 OpenCode，都在这里。</h2>
+            <p class="muted">默认使用最低思考强度，优先保证回复速度。敏感操作只对管理员开放。</p>
+          </div>
+          <img src="/favicon.svg" alt="" class="hero-mark">
+        </div>
+        <div class="cards" id="status-cards"></div>
+        <div class="split">
+          <article class="panel glass">
+            <div class="panel-head"><h3>最近会话</h3><button data-go="sessions" class="text-button">查看全部</button></div>
+            <div id="recent-sessions" class="session-list"></div>
+          </article>
+          <article class="panel glass">
+            <div class="panel-head"><h3>最近日志</h3><button data-go="logs" class="text-button">完整日志</button></div>
+            <div id="recent-logs" class="log-list compact-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-chat" class="view">
+        <div class="chat-layout">
+          <aside class="conversation-rail glass">
+            <div class="panel-head"><h3>会话</h3><button id="new-chat" class="text-button">新对话</button></div>
+            <div id="conversation-list" class="session-list"></div>
+          </aside>
+          <article class="chat-panel glass">
+            <div class="chat-head">
+              <div><strong id="chat-title">网页管理员</strong><small id="chat-subtitle">独立网页会话 · 不影响 QQ 上下文</small></div>
+              <div class="chat-controls">
+                <select id="model-select" aria-label="模型"></select>
+                <select id="variant-select" aria-label="思考强度"></select>
+                <button id="stop-chat" class="ghost small">停止</button>
+              </div>
+            </div>
+            <div id="message-list" class="messages"></div>
+            <form id="chat-form" class="composer">
+              <textarea id="chat-input" rows="2" placeholder="写下你的问题… Enter 发送，Shift+Enter 换行" maxlength="8000"></textarea>
+              <button class="primary send" type="submit">发送</button>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-sessions" class="view">
+        <article class="panel glass">
+          <div class="panel-head"><h3>QQ 与网页会话</h3><span class="muted tiny">群聊共享上下文，90 天后自动清理消息</span></div>
+          <div class="table-wrap"><table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Agent</th><th>队列</th><th>更新时间</th></tr></thead><tbody id="sessions-body"></tbody></table></div>
+        </article>
+      </section>
+
+      <section id="view-settings" class="view">
+        <article class="panel glass settings-panel">
+          <div class="panel-head"><h3>运行设置</h3><span class="muted tiny">保存后立即生效，不修改 .env 中的密钥</span></div>
+          <form id="settings-form" class="settings-grid">
+            <label>私聊白名单<textarea name="allowedPrivateIds" rows="3" placeholder="QQ号，逗号分隔"></textarea></label>
+            <label>群聊白名单<textarea name="allowedGroupIds" rows="3" placeholder="群号，逗号分隔"></textarea></label>
+            <label>管理员 QQ<textarea name="adminQqIds" rows="3" placeholder="管理员QQ号，逗号分隔"></textarea></label>
+            <label>默认思考强度<select name="defaultVariant"><option value="none">关闭</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
+            <label>群聊必须 @Bot<select name="requireMention"><option value="true">是</option><option value="false">否</option></select></label>
+            <label>队列上限<input name="queueMax" type="number" min="1" max="50"></label>
+            <label>回复分片长度<input name="replyChunkSize" type="number" min="200" max="4000"></label>
+            <label>分片间隔（毫秒）<input name="replyDelayMs" type="number" min="0" max="5000"></label>
+            <label>记录保留天数<input name="retentionDays" type="number" min="1" max="3650"></label>
+            <div class="form-actions"><button class="primary" type="submit">保存设置</button><span id="settings-message" class="muted tiny"></span></div>
+          </form>
+        </article>
+      </section>
+
+      <section id="view-logs" class="view">
+        <div class="split logs-split">
+          <article class="panel glass"><div class="panel-head"><h3>运行日志</h3></div><div id="logs-list" class="log-list"></div></article>
+          <article class="panel glass"><div class="panel-head"><h3>命令审计</h3></div><div id="audit-list" class="log-list"></div></article>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

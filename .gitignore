@@ -1,0 +1,13 @@
+.target/
+target/
+.idea/
+.vscode/
+*.iml
+.env
+data/
+agent-workspace/*
+!agent-workspace/.gitkeep
+logs/
+*.log
+.DS_Store
+.codex/

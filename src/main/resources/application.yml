@@ -1,0 +1,66 @@
+server:
+  port: ${WEB_PORT:8080}
+  forward-headers-strategy: native
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+
+spring:
+  application:
+    name: qq-opencode-connect
+  lifecycle:
+    timeout-per-shutdown-phase: 5s
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3307/qqbot?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:qqbot}
+    password: ${DB_PASSWORD:qqbot-password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  jackson:
+    default-property-inclusion: non_null
+  mvc:
+    problemdetails:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+qqbot:
+  web:
+    admin-username: ${WEB_ADMIN_USERNAME:admin}
+    admin-password: ${WEB_ADMIN_PASSWORD:change-me-now}
+  opencode:
+    mode: ${OPENCODE_MODE:docker}
+    base-url: ${OPENCODE_BASE_URL:http://127.0.0.1:4096}
+    username: ${OPENCODE_SERVER_USERNAME:opencode}
+    password: ${OPENCODE_SERVER_PASSWORD:}
+    model-variant: ${OPENCODE_MODEL_VARIANT:none}
+    timeout-seconds: ${QQBOT_OPENCODE_TIMEOUT_SECONDS:300}
+  onebot:
+    token: ${ONEBOT_TOKEN:}
+    require-mention: ${ONEBOT_REQUIRE_MENTION:true}
+    allowed-private-ids: ${ONEBOT_ALLOWED_PRIVATE_IDS:}
+    allowed-group-ids: ${ONEBOT_ALLOWED_GROUP_IDS:}
+    admin-qq-ids: ${BOT_ADMIN_QQ_IDS:}
+  queue:
+    poll-ms: 500
+    max: ${QQBOT_QUEUE_MAX:5}
+  reply:
+    chunk-size: ${QQBOT_REPLY_CHUNK_SIZE:1800}
+    delay-ms: ${QQBOT_REPLY_DELAY_MS:250}
+  retention:
+    days: ${QQBOT_RETENTION_DAYS:90}
