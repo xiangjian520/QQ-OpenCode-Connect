@@ -32,6 +32,11 @@ class OpenCodeClientTest {
         server.createContext("/api/session/ses_1", exchange -> json(exchange, """
                 {"data":{"id":"ses_1","time":{"created":1000,"updated":2000,"idle":2500}}}
                 """));
+        server.createContext("/api/session/ses_quota/message", exchange -> json(exchange, """
+                {"data":[{"id":"msg_quota","type":"assistant","time":{"created":2000},"content":[],
+                "error":{"type":"provider.quota","message":"Free usage limit reached","status":429}}],
+                "cursor":{"previous":null,"next":null}}
+                """));
         server.createContext("/api/session/ses_1/message", exchange -> json(exchange, """
                 {"data":[
                   {"id":"msg_2","type":"assistant","time":{"created":2000},"content":[
@@ -81,6 +86,15 @@ class OpenCodeClientTest {
         var reply = client.latestAssistantReply("ses_1", 1000).orElseThrow();
         assertThat(reply.messageId()).isEqualTo("msg_2");
         assertThat(reply.text()).isEqualTo("最终回答");
+    }
+
+    @Test
+    void mapsFreeQuotaErrorsToFriendlyMessage() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> client.latestAssistantReply("ses_quota", 1000))
+                .isInstanceOf(OpenCodeException.class)
+                .hasMessageContaining("免费模型额度已用完")
+                .extracting(error -> ((OpenCodeException) error).statusCode())
+                .isEqualTo(429);
     }
 
     private static void json(HttpExchange exchange, String body) throws IOException {

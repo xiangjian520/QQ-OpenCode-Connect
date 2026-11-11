@@ -359,8 +359,14 @@ public class ChatOrchestrator implements InboundMessageHandler {
             if (openCodeException.statusCode() == 409) {
                 return "OpenCode 当前会话仍在处理其他任务，请稍后重试";
             }
+            if (openCodeException.statusCode() == 429) {
+                return "免费模型额度已用完。请管理员登录 OpenCode 账号或配置付费 Provider 后重试。";
+            }
         }
         String message = ex.getMessage();
+        if (message != null && (message.contains("FreeUsageLimitError") || message.contains("Free usage limit"))) {
+            return "免费模型额度已用完。请管理员登录 OpenCode 账号或配置付费 Provider 后重试。";
+        }
         if (message == null || message.isBlank()) {
             return "OpenCode 请求失败";
         }

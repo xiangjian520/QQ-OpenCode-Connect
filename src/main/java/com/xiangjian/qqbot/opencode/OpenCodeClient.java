@@ -157,7 +157,16 @@ public class OpenCodeClient {
             }
             JsonNode error = message.path("error");
             if (!error.isMissingNode() && !error.isNull()) {
-                throw new OpenCodeException("OpenCode 返回错误: " + error.toString(), -1);
+                int status = error.path("status").asInt(-1);
+                String errorType = error.path("type").asText("");
+                String errorMessage = error.path("message").asText("");
+                if (status == 429 || "provider.quota".equals(errorType)
+                        || errorMessage.contains("Free usage limit")) {
+                    throw new OpenCodeException(
+                            "免费模型额度已用完。请管理员登录 OpenCode 账号或配置付费 Provider 后重试。", 429);
+                }
+                String safeMessage = errorMessage.isBlank() ? errorType : errorMessage;
+                throw new OpenCodeException("OpenCode 模型调用失败: " + safeMessage, status);
             }
         }
         return Optional.empty();
