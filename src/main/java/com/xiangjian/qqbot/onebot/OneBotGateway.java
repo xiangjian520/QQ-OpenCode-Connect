@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,6 +70,42 @@ public class OneBotGateway implements QqPlatformAdapter {
         ObjectNode text = message.addObject();
         text.put("type", "text");
         text.putObject("data").put("text", outbound.text());
+        return broadcast(payload);
+    }
+
+    public boolean sendImage(ChatType chatType, String chatId, byte[] image, String replyToMessageId) {
+        return sendImageFile(chatType, chatId,
+                "base64://" + Base64.getEncoder().encodeToString(image), replyToMessageId);
+    }
+
+    public boolean sendImageUrl(ChatType chatType, String chatId, String imageUrl, String replyToMessageId) {
+        return sendImageFile(chatType, chatId, imageUrl, replyToMessageId);
+    }
+
+    private boolean sendImageFile(ChatType chatType, String chatId, String file, String replyToMessageId) {
+        if (!registry.connected()) {
+            log.warn("Cannot send QQ image: OneBot is not connected");
+            return false;
+        }
+        String action = chatType == ChatType.GROUP ? "send_group_msg" : "send_private_msg";
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("action", action);
+        payload.put("echo", "qqbot-image-" + echo.incrementAndGet());
+        ObjectNode params = payload.putObject("params");
+        if (chatType == ChatType.GROUP) {
+            params.put("group_id", chatId);
+        } else {
+            params.put("user_id", chatId);
+        }
+        ArrayNode message = params.putArray("message");
+        if (replyToMessageId != null && !replyToMessageId.isBlank()) {
+            ObjectNode reply = message.addObject();
+            reply.put("type", "reply");
+            reply.putObject("data").put("id", replyToMessageId);
+        }
+        ObjectNode imageSegment = message.addObject();
+        imageSegment.put("type", "image");
+        imageSegment.putObject("data").put("file", file);
         return broadcast(payload);
     }
 

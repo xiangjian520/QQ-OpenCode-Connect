@@ -22,6 +22,9 @@
         <button data-view="overview" class="active"><span>⌂</span>总览</button>
         <button data-view="chat"><span>✉</span>网页聊天</button>
         <button data-view="sessions"><span>◌</span>会话记录</button>
+        <button data-view="onebot"><span>◉</span>OneBot</button>
+        <button data-view="opencode"><span>✧</span>OpenCode 模型</button>
+        <button data-view="entertainment"><span>♪</span>娱乐中心</button>
         <button data-view="settings"><span>⚙</span>运行设置</button>
         <button data-view="logs"><span>≡</span>日志与审计</button>
       </nav>
@@ -94,15 +97,95 @@
         </article>
       </section>
 
+      <section id="view-onebot" class="view">
+        <div class="split config-split">
+          <article class="panel glass">
+            <div class="panel-head"><h3>OneBot v11 / NapCat</h3><span id="onebot-health" class="status-chip">检查中</span></div>
+            <form id="onebot-form" class="settings-grid single-column">
+              <label>WebSocket Token
+                <div class="secret-row">
+                  <input id="onebot-token" name="token" type="password" autocomplete="new-password" placeholder="留空表示保持当前 Token">
+                  <button type="button" id="toggle-onebot-token" class="ghost small">显示</button>
+                  <button type="button" id="regenerate-onebot-token" class="ghost small">生成新 Token</button>
+                </div>
+                <small id="onebot-token-preview" class="muted"></small>
+              </label>
+              <label>群聊必须 @Bot<select name="requireMention"><option value="true">是</option><option value="false">否</option></select></label>
+              <label>私聊白名单<textarea name="allowedPrivateIds" rows="3" placeholder="QQ号，逗号分隔"></textarea></label>
+              <label>群聊白名单<textarea name="allowedGroupIds" rows="3" placeholder="群号，逗号分隔"></textarea></label>
+              <label>管理员 QQ<textarea name="adminQqIds" rows="3" placeholder="管理员QQ号，逗号分隔"></textarea></label>
+              <div class="form-actions"><button class="primary" type="submit">保存 OneBot 设置</button><span id="onebot-message" class="muted tiny"></span></div>
+            </form>
+          </article>
+          <article class="panel glass guide-panel">
+            <div class="panel-head"><h3>NapCat 连接</h3><span class="badge">反向 WS</span></div>
+            <div class="info-list">
+              <div><small>WebSocket 地址</small><code id="onebot-ws-url">ws://本机IP:8080/onebot/v11/ws</code></div>
+              <div><small>当前连接</small><strong id="onebot-connection">未连接</strong></div>
+              <div><small>登录账号</small><strong id="onebot-self-id">—</strong></div>
+            </div>
+            <p class="safe-note">Docker 中的 NapCat 可使用 <code>ws://host.docker.internal:8080/onebot/v11/ws</code>，并在容器中配置 <code>host-gateway</code>。Token 保存后立即用于新握手。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-opencode" class="view">
+        <div class="split config-split">
+          <article class="panel glass">
+            <div class="panel-head"><h3>OpenCode 默认模型</h3><button id="refresh-models" class="text-button">刷新模型</button></div>
+            <form id="opencode-form" class="settings-grid single-column">
+              <label>默认模型<select id="opencode-model" name="model"></select></label>
+              <label>默认思考强度<select id="opencode-variant" name="variant"></select></label>
+              <div class="form-actions"><button class="primary" type="submit">保存模型设置</button><span id="opencode-message" class="muted tiny"></span></div>
+            </form>
+            <p class="safe-note">模型设置只影响尚未建立 OpenCode 会话的新对话。已有会话可在聊天页单独切换。</p>
+          </article>
+          <article class="panel glass guide-panel">
+            <div class="panel-head"><h3>连接状态</h3><span id="opencode-health" class="status-chip">检查中</span></div>
+            <div class="info-list">
+              <div><small>OpenCode 版本</small><strong id="opencode-version">—</strong></div>
+              <div><small>服务地址</small><code id="opencode-base-url">—</code></div>
+              <div><small>当前默认</small><strong id="opencode-active-default">—</strong></div>
+            </div>
+            <p class="safe-note">免费模型额度耗尽时，请执行 <code>./scripts/opencode-auth.sh</code> 登录 OpenCode Go 或配置其他 Provider。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-entertainment" class="view">
+        <article class="panel glass entertainment-hero">
+          <div>
+            <p class="eyebrow">SAFE ENTERTAINMENT</p>
+            <h2>轻松一下，但不越界。</h2>
+            <p class="muted">从 Eridanus 完整筛选并重写了安全娱乐、ACG 查询、签到现在与社交互动功能。素材来源与许可见页面底部说明。</p>
+          </div>
+          <div class="entertainment-hero-meta"><span id="entertainment-count" class="badge">0 项功能</span><span class="entertainment-mark">🐷</span></div>
+        </article>
+        <div id="entertainment-feature-groups" class="feature-groups"></div>
+        <div class="split">
+          <article class="panel glass asset-panel">
+            <div class="panel-head"><h3>安全素材图鉴</h3><span class="muted tiny">Eridanus · CC BY-NC-SA 4.0</span></div>
+            <div class="asset-tabs" role="tablist" aria-label="素材分类">
+              <button class="active" data-gallery="pig">小猪</button>
+              <button data-gallery="tarot">塔罗</button>
+              <button data-gallery="sticker">反应表情</button>
+            </div>
+            <div id="asset-gallery" class="pig-gallery"></div>
+          </article>
+          <article class="panel glass">
+            <div class="panel-head"><h3>进行中的游戏</h3><span id="active-game-count" class="badge">0</span></div>
+            <div id="active-games" class="session-list"></div>
+            <p class="safe-note">不包含 NSFW、成人图源、色情搜索或露骨内容。</p>
+            <p class="safe-note">小猪素材来自 <a href="https://github.com/AOrbitron/Eridanus" target="_blank" rel="noreferrer">Eridanus</a>，按 CC BY-NC-SA 4.0 仅限非商业使用；本项目其余代码使用 MIT。</p>
+          </article>
+        </div>
+      </section>
+
       <section id="view-settings" class="view">
         <article class="panel glass settings-panel">
-          <div class="panel-head"><h3>运行设置</h3><span class="muted tiny">保存后立即生效，不修改 .env 中的密钥</span></div>
+          <div class="panel-head"><h3>运行设置</h3><span class="muted tiny">队列、分片和娱乐开关</span></div>
           <form id="settings-form" class="settings-grid">
-            <label>私聊白名单<textarea name="allowedPrivateIds" rows="3" placeholder="QQ号，逗号分隔"></textarea></label>
-            <label>群聊白名单<textarea name="allowedGroupIds" rows="3" placeholder="群号，逗号分隔"></textarea></label>
-            <label>管理员 QQ<textarea name="adminQqIds" rows="3" placeholder="管理员QQ号，逗号分隔"></textarea></label>
-            <label>默认思考强度<select name="defaultVariant"><option value="none">关闭</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
-            <label>群聊必须 @Bot<select name="requireMention"><option value="true">是</option><option value="false">否</option></select></label>
+            <label>启用安全娱乐<select name="entertainmentEnabled"><option value="true">开启</option><option value="false">关闭</option></select></label>
             <label>队列上限<input name="queueMax" type="number" min="1" max="50"></label>
             <label>回复分片长度<input name="replyChunkSize" type="number" min="200" max="4000"></label>
             <label>分片间隔（毫秒）<input name="replyDelayMs" type="number" min="0" max="5000"></label>

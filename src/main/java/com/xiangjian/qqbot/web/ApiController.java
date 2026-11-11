@@ -10,6 +10,7 @@ import com.xiangjian.qqbot.repository.ConversationRepository;
 import com.xiangjian.qqbot.repository.JobRepository;
 import com.xiangjian.qqbot.repository.MessageRepository;
 import com.xiangjian.qqbot.service.ChatOrchestrator;
+import com.xiangjian.qqbot.service.EntertainmentService;
 import com.xiangjian.qqbot.service.SettingsService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ public class ApiController {
     private final MessageRepository messages;
     private final JobRepository jobs;
     private final SettingsService settings;
+    private final EntertainmentService entertainment;
     private final OpenCodeClient openCode;
     private final OneBotConnectionRegistry oneBot;
     private final UiEventHub events;
@@ -49,6 +51,7 @@ public class ApiController {
                          MessageRepository messages,
                          JobRepository jobs,
                          SettingsService settings,
+                         EntertainmentService entertainment,
                          OpenCodeClient openCode,
                          OneBotConnectionRegistry oneBot,
                          UiEventHub events,
@@ -58,6 +61,7 @@ public class ApiController {
         this.messages = messages;
         this.jobs = jobs;
         this.settings = settings;
+        this.entertainment = entertainment;
         this.openCode = openCode;
         this.oneBot = oneBot;
         this.events = events;
@@ -130,6 +134,75 @@ public class ApiController {
     @GetMapping("/models")
     public List<Map<String, Object>> models() {
         return openCode.listModels().stream().map(this::modelView).toList();
+    }
+
+    @GetMapping("/onebot/settings")
+    public Map<String, Object> oneBotSettings() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.putAll(settings.oneBotSettings());
+        result.put("status", oneBot.status());
+        return result;
+    }
+
+    @PutMapping("/onebot/settings")
+    public Map<String, Object> updateOneBotSettings(@RequestBody OneBotUpdate request) {
+        Map<String, String> values = new LinkedHashMap<>();
+        if (request.token() != null && !request.token().isBlank()) values.put(SettingsService.ONEBOT_TOKEN, request.token());
+        if (request.requireMention() != null) values.put(SettingsService.ONEBOT_REQUIRE_MENTION, request.requireMention().toString());
+        if (request.allowedPrivateIds() != null) values.put(SettingsService.ONEBOT_ALLOWED_PRIVATE_IDS, request.allowedPrivateIds());
+        if (request.allowedGroupIds() != null) values.put(SettingsService.ONEBOT_ALLOWED_GROUP_IDS, request.allowedGroupIds());
+        if (request.adminQqIds() != null) values.put(SettingsService.ONEBOT_ADMIN_QQ_IDS, request.adminQqIds());
+        settings.updateOneBot(values);
+        audit.record("web-admin", "onebot-settings-update", null, "updated");
+        events.publish("onebot-settings-changed", settings.oneBotSettings());
+        return oneBotSettings();
+    }
+
+    @PostMapping("/onebot/token/regenerate")
+    public Map<String, Object> regenerateOneBotToken() {
+        String token = settings.regenerateOneBotToken();
+        audit.record("web-admin", "onebot-token-regenerate", null, null);
+        events.log("INFO", "OneBot Token 已重新生成");
+        return Map.of("token", token, "settings", oneBotSettings());
+    }
+
+    @GetMapping("/opencode/settings")
+    public Map<String, Object> openCodeSettings() {
+        Map<String, Object> result = new LinkedHashMap<>(settings.openCodeSettings());
+        OpenCodeModels.Info info = openCode.info();
+        result.put("connection", Map.of(
+                "healthy", info.healthy(),
+                "version", info.version(),
+                "baseUrl", openCode.baseUrl(),
+                "error", info.error()
+        ));
+        try {
+            result.put("activeDefaultModel", openCode.defaultModel().map(this::modelView).orElse(null));
+        } catch (RuntimeException ex) {
+            result.put("activeDefaultModel", null);
+            result.put("error", ex.getMessage());
+        }
+        return result;
+    }
+
+    @PutMapping("/opencode/settings")
+    public Map<String, Object> updateOpenCodeSettings(@RequestBody OpenCodeDefaults request) {
+        settings.updateOpenCodeDefaults(request.providerId(), request.modelId(), request.variant());
+        audit.record("web-admin", "opencode-settings-update", null,
+                request.providerId() + "/" + request.modelId() + "/" + request.variant());
+        events.publish("opencode-settings-changed", settings.openCodeSettings());
+        return openCodeSettings();
+    }
+
+    @GetMapping("/entertainment")
+    public Map<String, Object> entertainment() {
+        return entertainment.overview();
+    }
+
+    @PostMapping("/entertainment/run")
+    public Map<String, Object> runEntertainment(@Valid @RequestBody EntertainmentRun request) {
+        orchestrator.submitWebMessage(request.command());
+        return Map.of("accepted", true);
     }
 
     @PostMapping("/conversations/{key}/model")
@@ -252,4 +325,16 @@ public class ApiController {
     public record ModelUpdate(String providerId, String modelId, String variant) {}
 
     public record VariantUpdate(String variant) {}
+
+    public record OneBotUpdate(
+            String token,
+            Boolean requireMention,
+            String allowedPrivateIds,
+            String allowedGroupIds,
+            String adminQqIds
+    ) {}
+
+    public record OpenCodeDefaults(String providerId, String modelId, String variant) {}
+
+    public record EntertainmentRun(@NotBlank String command) {}
 }

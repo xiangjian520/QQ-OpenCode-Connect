@@ -5,6 +5,10 @@ const state = {
   models: [],
   status: null,
   settings: {},
+  oneBotSettings: null,
+  openCodeSettings: null,
+  entertainment: null,
+  gallery: 'pig',
   selected: WEB_KEY,
   view: 'overview'
 };
@@ -37,7 +41,7 @@ async function api(path, options = {}) {
   }
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch(path, {...options, method, headers, credentials: 'same-origin'});
-  if (response.status === 401 || response.redirected && location.pathname.endsWith('/login.html')) {
+  if (response.status === 401 || response.redirected) {
     location.href = '/login.html';
     throw new Error('登录已过期');
   }
@@ -63,11 +67,17 @@ function switchView(view) {
   state.view = view;
   $$('.view').forEach(el => el.classList.toggle('active', el.id === `view-${view}`));
   $$('.nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
-  const titles = {overview: '运行总览', chat: '网页聊天', sessions: '会话记录', settings: '运行设置', logs: '日志与审计'};
+  const titles = {
+    overview: '运行总览', chat: '网页聊天', sessions: '会话记录', onebot: 'OneBot 设置',
+    opencode: 'OpenCode 模型', entertainment: '娱乐中心', settings: '运行设置', logs: '日志与审计'
+  };
   $('#view-title').textContent = titles[view] || '控制台';
   if (view === 'chat') loadMessages();
   if (view === 'logs') loadLogs();
   if (view === 'settings') renderSettings();
+  if (view === 'onebot') loadOneBot();
+  if (view === 'opencode') loadOpenCode();
+  if (view === 'entertainment') loadEntertainment();
 }
 
 async function loadStatus() {
@@ -94,7 +104,7 @@ function renderStatus() {
     ['QQ / ONEBOT', onebot.connected ? '已连接' : '未连接', `账号 ${onebot.selfId || '—'} · ${onebot.connectionCount || 0} 个连接`],
     ['OPENCODE', opencode.healthy ? '服务在线' : '不可用', `${opencode.version || 'unknown'} · ${model}`],
     ['队列', `${queue.pending || 0} 待处理`, `${queue.running || 0} 运行中 · ${queue.failed || 0} 失败`],
-    ['思考强度', variantLabel(s.settings?.defaultVariant || 'none'), '默认关闭思考，优先发送速度']
+    ['思考强度', variantLabel(state.openCodeSettings?.variant || 'none'), '默认关闭思考，优先发送速度']
   ];
   $('#status-cards').innerHTML = cards.map(([label, value, detail]) => `
     <article class="card"><small>${esc(label)}</small><strong>${esc(value)}</strong><div class="detail" title="${esc(detail)}">${esc(detail)}</div></article>
@@ -189,7 +199,7 @@ function syncChatControls() {
   ).join('') || '<option value="">暂无模型</option>';
   const variantSelect = $('#variant-select');
   const variants = model?.variants || [];
-  const currentVariant = item?.modelVariant || state.settings.defaultVariant || '';
+  const currentVariant = item?.modelVariant || state.openCodeSettings?.variant || 'none';
   variantSelect.innerHTML = variants.length
     ? variants.map(v => `<option value="${esc(v)}" ${v === currentVariant ? 'selected' : ''}>${esc(variantLabel(v))}</option>`).join('')
     : '<option value="">默认</option>';
@@ -203,6 +213,7 @@ async function loadModels() {
     state.models = state.status?.defaultModel ? [state.status.defaultModel] : [];
   }
   syncChatControls();
+  if (state.openCodeSettings) renderOpenCode();
 }
 
 async function changeModel() {
@@ -243,6 +254,14 @@ async function loadMessages() {
   }
 }
 
+function renderBubble(content) {
+  const image = String(content ?? '').match(/^\[\[img:(\/entertainment\/[^|]+|https:\/\/www\.gstatic\.com\/android\/keyboard\/emojikitchen\/[^|]+)\|([^\]]*)\]\]$/);
+  if (image) {
+    return `<img src="${esc(image[1])}" alt="${esc(image[2] || '娱乐图片')}" loading="lazy">`;
+  }
+  return esc(content);
+}
+
 function renderMessages(messages) {
   const box = $('#message-list');
   if (!messages || messages.length === 0) {
@@ -253,8 +272,8 @@ function renderMessages(messages) {
     const out = message.direction === 'OUT';
     const cls = `${out ? 'out' : 'in'} ${message.status === 'send-failed' || message.status === 'failed' ? 'failed' : ''}`;
     return `<div class="message ${cls}">
-      <div class="message-meta">${esc(out ? (message.senderId === 'system' ? '系统' : 'OpenCode') : '用户')} · ${fmtTime(message.createdAt)}</div>
-      <div class="bubble">${esc(message.content)}</div>
+      <div class="message-meta">${esc(out ? (message.senderId === 'system' ? '系统' : 'Bot') : '用户')} · ${fmtTime(message.createdAt)}</div>
+      <div class="bubble">${renderBubble(message.content)}</div>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
@@ -292,6 +311,199 @@ async function stopConversation() {
     toast(`已停止，取消 ${result.cancelled || 0} 个任务`);
     await loadMessages();
     await loadStatus();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function loadOneBot() {
+  try {
+    state.oneBotSettings = await api('/api/ui/onebot/settings');
+    renderOneBot();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function renderOneBot() {
+  const data = state.oneBotSettings;
+  if (!data) return;
+  const form = $('#onebot-form');
+  form.elements.requireMention.value = String(data.requireMention);
+  form.elements.allowedPrivateIds.value = data.allowedPrivateIds || '';
+  form.elements.allowedGroupIds.value = data.allowedGroupIds || '';
+  form.elements.adminQqIds.value = data.adminQqIds || '';
+  const status = data.status || {};
+  const health = $('#onebot-health');
+  health.textContent = status.connected ? '已连接' : '未连接';
+  health.classList.toggle('online', Boolean(status.connected));
+  $('#onebot-connection').textContent = status.connected ? `${status.connectionCount || 0} 个连接` : '未连接';
+  $('#onebot-self-id').textContent = status.selfId || '—';
+  $('#onebot-token-preview').textContent = data.tokenConfigured
+    ? `当前 Token：${data.tokenPreview}` : '尚未配置 Token，建议立即生成。';
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  $('#onebot-ws-url').textContent = `${protocol}://${location.host}/onebot/v11/ws`;
+}
+
+async function saveOneBot(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = {
+    token: form.elements.token.value.trim(),
+    requireMention: form.elements.requireMention.value === 'true',
+    allowedPrivateIds: form.elements.allowedPrivateIds.value,
+    allowedGroupIds: form.elements.allowedGroupIds.value,
+    adminQqIds: form.elements.adminQqIds.value
+  };
+  try {
+    state.oneBotSettings = await api('/api/ui/onebot/settings', {method: 'PUT', body: JSON.stringify(values)});
+    form.elements.token.value = '';
+    $('#onebot-message').textContent = '已保存';
+    renderOneBot();
+    toast('OneBot 设置已保存，新连接将使用最新 Token');
+    await loadStatus();
+  } catch (error) {
+    $('#onebot-message').textContent = error.message;
+    toast(error.message, true);
+  }
+}
+
+async function regenerateOneBotToken() {
+  try {
+    const result = await api('/api/ui/onebot/token/regenerate', {method: 'POST'});
+    state.oneBotSettings = result.settings;
+    const input = $('#onebot-token');
+    input.type = 'text';
+    input.value = result.token;
+    renderOneBot();
+    try { await navigator.clipboard.writeText(result.token); } catch (_) {}
+    toast('新 Token 已生成，请立即同步到 NapCat');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function populateOpenCodeSelects() {
+  const modelSelect = $('#opencode-model');
+  if (!modelSelect) return;
+  const configuredProvider = state.openCodeSettings?.providerId || '';
+  const configuredModel = state.openCodeSettings?.modelId || '';
+  modelSelect.innerHTML = '<option value="">跟随 OpenCode 默认</option>' + state.models.map(model => {
+    const value = `${model.providerId}|${model.id}`;
+    const selected = model.providerId === configuredProvider && model.id === configuredModel;
+    return `<option value="${esc(value)}" ${selected ? 'selected' : ''}>${esc(model.label)}</option>`;
+  }).join('');
+  renderOpenCodeVariants();
+}
+
+function renderOpenCodeVariants() {
+  const select = $('#opencode-variant');
+  if (!select) return;
+  const [provider, id] = ($('#opencode-model').value || '').split('|');
+  const model = state.models.find(item => item.providerId === provider && item.id === id);
+  const current = state.openCodeSettings?.variant || '';
+  select.innerHTML = '<option value="">模型默认</option>' + (model?.variants || []).map(variant =>
+    `<option value="${esc(variant)}" ${variant === current ? 'selected' : ''}>${esc(variantLabel(variant))}</option>`
+  ).join('');
+}
+
+async function loadOpenCode() {
+  try {
+    state.openCodeSettings = await api('/api/ui/opencode/settings');
+    renderOpenCode();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function renderOpenCode() {
+  const data = state.openCodeSettings;
+  if (!data) return;
+  const connection = data.connection || {};
+  const health = $('#opencode-health');
+  health.textContent = connection.healthy ? '服务在线' : '不可用';
+  health.classList.toggle('online', Boolean(connection.healthy));
+  $('#opencode-version').textContent = connection.version || 'unknown';
+  $('#opencode-base-url').textContent = connection.baseUrl || '—';
+  $('#opencode-active-default').textContent = data.activeDefaultModel?.label || '未配置';
+  populateOpenCodeSelects();
+}
+
+async function saveOpenCode(event) {
+  event.preventDefault();
+  const [providerId, modelId] = ($('#opencode-model').value || '').split('|');
+  const body = {providerId: providerId || '', modelId: modelId || '', variant: $('#opencode-variant').value || ''};
+  try {
+    state.openCodeSettings = await api('/api/ui/opencode/settings', {method: 'PUT', body: JSON.stringify(body)});
+    renderOpenCode();
+    $('#opencode-message').textContent = '已保存';
+    toast('OpenCode 默认模型已保存');
+  } catch (error) {
+    $('#opencode-message').textContent = error.message;
+    toast(error.message, true);
+  }
+}
+
+async function loadEntertainment() {
+  try {
+    state.entertainment = await api('/api/ui/entertainment');
+    renderEntertainment();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function renderEntertainment() {
+  const data = state.entertainment;
+  if (!data) return;
+  const groups = data.featureGroups?.length ? data.featureGroups : [{name: '功能', features: data.features || []}];
+  $('#entertainment-count').textContent = `${data.featureCount || data.features?.length || 0} 项功能`;
+  $('#entertainment-feature-groups').innerHTML = groups.map(group => `
+    <section class="feature-section">
+      <div class="feature-section-head"><h3>${esc(group.name)}</h3><span class="muted tiny">${group.features.length} 项</span></div>
+      <div class="feature-grid">${group.features.map(feature => `
+        <article class="feature-card glass">
+          <span class="badge">安全</span>
+          <h3>${esc(feature.name)}</h3>
+          <p>${esc(feature.description)}</p>
+          <code>${esc(feature.command)}</code>
+          <button class="ghost small run-feature" data-command="${esc(feature.command)}">在网页聊天试用</button>
+        </article>`).join('')}</div>
+    </section>`).join('');
+  $$('.run-feature').forEach(button => button.addEventListener('click', () => runEntertainment(button.dataset.command)));
+  renderAssetGallery();
+  $('#active-game-count').textContent = data.activeGames || 0;
+  const games = data.recentGames || [];
+  $('#active-games').innerHTML = games.length ? games.map(game => `
+    <div class="session-item"><span class="avatar">${game.game_type === 'guess' ? '?' : '井'}</span>
+      <span class="session-copy"><strong>${esc(game.game_type)}</strong><small>${esc(game.conversation_key)}</small></span>
+      <span class="badge">${fmtTime(game.updated_at)}</span></div>
+  `).join('') : '<div class="empty">暂无进行中的游戏</div>';
+}
+
+function renderAssetGallery() {
+  const data = state.entertainment;
+  if (!data) return;
+  const gallery = {
+    pig: data.pigGallery || [],
+    tarot: data.tarotGallery || [],
+    sticker: data.stickerGallery || []
+  }[state.gallery] || [];
+  $('#asset-gallery').innerHTML = gallery.map(item => `
+    <figure title="${esc((item.keywords || []).join('、'))}">
+      <img src="${esc(item.image)}" alt="${esc(item.name)}" loading="lazy">
+      <figcaption>${esc(item.name)}</figcaption>
+    </figure>
+  `).join('');
+  $$('.asset-tabs button').forEach(button => button.classList.toggle('active', button.dataset.gallery === state.gallery));
+}
+
+async function runEntertainment(command) {
+  try {
+    await api('/api/ui/entertainment/run', {method: 'POST', body: JSON.stringify({command})});
+    state.selected = WEB_KEY;
+    switchView('chat');
+    setTimeout(loadMessages, 180);
   } catch (error) {
     toast(error.message, true);
   }
@@ -358,6 +570,9 @@ function scheduleRefresh() {
     await Promise.all([loadStatus(), loadConversations()]);
     if (state.view === 'chat') await loadMessages();
     if (state.view === 'logs') await loadLogs();
+    if (state.view === 'onebot') await loadOneBot();
+    if (state.view === 'opencode') await loadOpenCode();
+    if (state.view === 'entertainment') await loadEntertainment();
   }, 220);
 }
 
@@ -371,7 +586,7 @@ function connectEvents() {
     $('#live-dot').classList.remove('online');
     $('#live-text').textContent = '正在重连';
   };
-  for (const name of ['message', 'queue-changed', 'job-changed', 'conversation-changed', 'status-changed', 'settings-changed', 'log']) {
+  for (const name of ['message', 'queue-changed', 'job-changed', 'conversation-changed', 'status-changed', 'settings-changed', 'onebot-settings-changed', 'opencode-settings-changed', 'log']) {
     source.addEventListener(name, (event) => {
       if (name === 'log') {
         try { const entry = JSON.parse(event.data); } catch (_) {}
@@ -384,8 +599,9 @@ function connectEvents() {
 async function init() {
   try {
     await csrfToken(true);
-    await Promise.all([loadStatus(), loadConversations(), loadSettings(), loadLogs()]);
+    await Promise.all([loadStatus(), loadConversations(), loadSettings(), loadLogs(), loadOneBot(), loadEntertainment()]);
     await loadModels();
+    await loadOpenCode();
     selectConversation(WEB_KEY);
     connectEvents();
     setInterval(loadStatus, 20_000);
@@ -401,6 +617,24 @@ $('#stop-chat').addEventListener('click', stopConversation);
 $('#model-select').addEventListener('change', changeModel);
 $('#variant-select').addEventListener('change', changeVariant);
 $('#settings-form').addEventListener('submit', saveSettings);
+$('#onebot-form').addEventListener('submit', saveOneBot);
+$('#regenerate-onebot-token').addEventListener('click', regenerateOneBotToken);
+$('#toggle-onebot-token').addEventListener('click', () => {
+  const input = $('#onebot-token');
+  input.type = input.type === 'password' ? 'text' : 'password';
+  $('#toggle-onebot-token').textContent = input.type === 'password' ? '显示' : '隐藏';
+});
+$('#opencode-form').addEventListener('submit', saveOpenCode);
+$('#opencode-model').addEventListener('change', renderOpenCodeVariants);
+$$('.asset-tabs button').forEach(button => button.addEventListener('click', () => {
+  state.gallery = button.dataset.gallery;
+  renderAssetGallery();
+}));
+$('#refresh-models').addEventListener('click', async () => {
+  await loadModels();
+  await loadOpenCode();
+  toast('模型列表已刷新');
+});
 $('#chat-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const input = $('#chat-input');

@@ -24,11 +24,11 @@ public class PermissionService {
     }
 
     public boolean isAdmin(String userId) {
-        return userId != null && settings.adminQqIds().contains(userId);
+        return "web-admin".equals(userId) || (userId != null && settings.adminQqIds().contains(userId));
     }
 
     public boolean canResetOrStop(ChatType type, String userId) {
-        return type == ChatType.PRIVATE || isAdmin(userId);
+        return type == ChatType.PRIVATE || type == ChatType.WEB || isAdmin(userId);
     }
 
     public boolean canChangeAiSettings(ChatType type, String userId) {

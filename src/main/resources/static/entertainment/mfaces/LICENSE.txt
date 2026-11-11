@@ -1,0 +1,6 @@
+These reaction emotes are adapted from the Eridanus project:
+https://github.com/AOrbitron/Eridanus
+
+Source path: data/pictures/Mface
+The upstream project and these adapted assets are licensed under CC BY-NC-SA 4.0.
+They are included for non-commercial use only. No NSFW/adult materials are included.

@@ -15,6 +15,7 @@ import com.xiangjian.qqbot.repository.MessageRepository;
 import com.xiangjian.qqbot.web.UiEventHub;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -91,9 +92,14 @@ public class CommandService {
         List<String> chunks = splitter.split(text, chunkSize);
         for (int i = 0; i < chunks.size(); i++) {
             String chunk = chunks.get(i);
-            OutboundMessage outbound = new OutboundMessage(message.chatType(), message.chatId(), chunk,
-                    i == 0 ? message.messageId() : null);
-            boolean sent = oneBot.send(outbound);
+            boolean sent;
+            if (message.chatType() == ChatType.WEB) {
+                sent = true;
+            } else {
+                OutboundMessage outbound = new OutboundMessage(message.chatType(), message.chatId(), chunk,
+                        i == 0 ? message.messageId() : null);
+                sent = oneBot.send(outbound);
+            }
             messages.insertOutbound(message.conversationKey(), null, "bot", chunk, sent ? "sent" : "send-failed");
             events.publish("message", Map.of(
                     "conversationKey", message.conversationKey(),
@@ -113,6 +119,41 @@ public class CommandService {
         }
     }
 
+    public void replyImage(InboundMessage message, String resourcePath, String altText) {
+        replyImageSource(message, resourcePath, altText, null);
+    }
+
+    public void replyImageUrl(InboundMessage message, String imageUrl, String altText) {
+        replyImageSource(message, null, altText, imageUrl);
+    }
+
+    private void replyImageSource(InboundMessage message, String resourcePath, String altText, String imageUrl) {
+        try {
+            boolean sent = true;
+            if (message.chatType() != ChatType.WEB) {
+                if (imageUrl != null) {
+                    sent = oneBot.sendImageUrl(message.chatType(), message.chatId(), imageUrl, message.messageId());
+                } else {
+                    byte[] image = new ClassPathResource("static" + resourcePath).getContentAsByteArray();
+                    sent = oneBot.sendImage(message.chatType(), message.chatId(), image, message.messageId());
+                }
+            }
+            String status = sent ? "sent" : "send-failed";
+            String content = "[[img:" + (imageUrl == null ? resourcePath : imageUrl) + "|" + altText + "]]";
+            messages.insertOutbound(message.conversationKey(), null, "bot", content, status);
+            events.publish("message", Map.of(
+                    "conversationKey", message.conversationKey(),
+                    "direction", "OUT",
+                    "content", content,
+                    "status", status,
+                    "time", Instant.now().toString()
+            ));
+        } catch (Exception ex) {
+            log.warn("Could not send entertainment image {}", imageUrl == null ? resourcePath : imageUrl, ex);
+            reply(message, altText);
+        }
+    }
+
     private void help(InboundMessage message) {
         reply(message, """
                 QQ-OpenCode-Connect 命令
@@ -123,6 +164,7 @@ public class CommandService {
                 /新对话 - 清空当前上下文
                 /停止 - 中断回复并清空队列
                 /编码 开启|关闭 - 仅管理员私聊，30 分钟有效
+                /娱乐 - 查看安全娱乐功能和游戏命令
                 /关于 - 项目信息
                 群聊中所有命令都需要先 @Bot。""");
     }
@@ -132,7 +174,7 @@ public class CommandService {
         String model = conversation.modelProvider() == null
                 ? "默认模型"
                 : conversation.modelProvider() + "/" + conversation.modelId();
-        String variant = conversation.modelVariant() == null ? settings.defaultVariant() : conversation.modelVariant();
+        String variant = conversation.modelVariant() == null ? settings.defaultValueVariant() : conversation.modelVariant();
         long codeRemaining = conversation.codeModeUntil() == null ? 0
                 : Math.max(0, conversation.codeModeUntil() - System.currentTimeMillis());
         reply(message, """
@@ -194,7 +236,7 @@ public class CommandService {
         }
         String variant = conversation.modelVariant();
         if (variant == null || !selected.supports(variant)) {
-            variant = selected.supports(settings.defaultVariant()) ? settings.defaultVariant() : null;
+            variant = selected.supports(settings.defaultValueVariant()) ? settings.defaultValueVariant() : null;
         }
         conversations.updateModel(conversation.conversationKey(), selected.providerId(), selected.id(), variant);
         if (conversation.opencodeSessionId() != null) {
@@ -212,7 +254,7 @@ public class CommandService {
 
     private void thinking(InboundMessage message, Conversation conversation, String args) {
         if (args.isBlank()) {
-            String variant = conversation.modelVariant() == null ? settings.defaultVariant() : conversation.modelVariant();
+            String variant = conversation.modelVariant() == null ? settings.defaultValueVariant() : conversation.modelVariant();
             reply(message, "当前思考强度：" + chineseVariant(variant) + " (" + variant + ")\n管理员可设：/思考 关闭|低|中|高");
             return;
         }

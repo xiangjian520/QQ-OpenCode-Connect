@@ -43,6 +43,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
     private final JobRepository jobs;
     private final SettingsService settings;
     private final PermissionService permissions;
+    private final EntertainmentService entertainment;
     private final CommandService commands;
     private final OpenCodeClient openCode;
     private final OpenCodeEventService openCodeEvents;
@@ -58,6 +59,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
                             JobRepository jobs,
                             SettingsService settings,
                             PermissionService permissions,
+                            EntertainmentService entertainment,
                             CommandService commands,
                             OpenCodeClient openCode,
                             OpenCodeEventService openCodeEvents,
@@ -70,6 +72,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
         this.jobs = jobs;
         this.settings = settings;
         this.permissions = permissions;
+        this.entertainment = entertainment;
         this.commands = commands;
         this.openCode = openCode;
         this.openCodeEvents = openCodeEvents;
@@ -111,7 +114,7 @@ public class ChatOrchestrator implements InboundMessageHandler {
                 "time", Instant.now().toString()
         ));
 
-        if (commands.tryHandle(message, conversation)) {
+        if (entertainment.tryHandle(message, conversation) || commands.tryHandle(message, conversation)) {
             messages.markInboundStatus(message.messageId(), "command");
             return;
         }
@@ -134,21 +137,30 @@ public class ChatOrchestrator implements InboundMessageHandler {
         }
         Conversation conversation = conversations.createWebConversation("网页管理员");
         String messageId = "web-" + UUID.randomUUID();
-        if (!messages.insertInbound(conversation.conversationKey(), messageId, "admin", text.strip())) {
+        String normalized = text.strip();
+        if (!messages.insertInbound(conversation.conversationKey(), messageId, "web-admin", normalized)) {
             throw new IllegalStateException("消息重复");
+        }
+        InboundMessage webMessage = new InboundMessage(
+                "web", ChatType.WEB, "admin", "web-admin", "网页管理员",
+                normalized, false, messageId, System.currentTimeMillis()
+        );
+        events.publish("message", Map.of(
+                "conversationKey", conversation.conversationKey(),
+                "direction", "IN",
+                "content", normalized,
+                "sender", "网页管理员",
+                "time", Instant.now().toString()
+        ));
+        if (entertainment.tryHandle(webMessage, conversation) || commands.tryHandle(webMessage, conversation)) {
+            messages.markInboundStatus(messageId, "command");
+            return;
         }
         if (jobs.activeCount(conversation.conversationKey()) >= settings.queueMax()) {
             messages.markInboundStatus(messageId, "queue-full");
             throw new IllegalStateException("当前网页会话队列已满");
         }
-        jobs.enqueue(conversation.conversationKey(), messageId, text.strip());
-        events.publish("message", Map.of(
-                "conversationKey", conversation.conversationKey(),
-                "direction", "IN",
-                "content", text.strip(),
-                "sender", "网页管理员",
-                "time", Instant.now().toString()
-        ));
+        jobs.enqueue(conversation.conversationKey(), messageId, normalized);
     }
 
     public int stopConversation(String conversationKey) {
@@ -275,11 +287,27 @@ public class ChatOrchestrator implements InboundMessageHandler {
         if (conversation.modelProvider() != null && conversation.modelId() != null) {
             return new OpenCodeModels.ModelRef(conversation.modelId(), conversation.modelProvider(), conversation.modelVariant());
         }
-        OpenCodeModels.Model model = openCode.defaultModel()
-                .orElseThrow(() -> new OpenCodeException("OpenCode 尚未配置模型，请先执行 opencode auth login", 401));
+        String configuredProvider = settings.defaultProviderId();
+        String configuredModel = settings.defaultModelId();
+        OpenCodeModels.Model model = null;
+        if (configuredProvider != null && !configuredProvider.isBlank()
+                && configuredModel != null && !configuredModel.isBlank()) {
+            model = openCode.listModels().stream()
+                    .filter(candidate -> candidate.providerId().equals(configuredProvider)
+                            && candidate.id().equals(configuredModel))
+                    .findFirst()
+                    .orElse(null);
+            if (model == null) {
+                events.log("WARN", "网页端设置的默认模型不可用: " + configuredProvider + "/" + configuredModel);
+            }
+        }
+        if (model == null) {
+            model = openCode.defaultModel()
+                    .orElseThrow(() -> new OpenCodeException("OpenCode 尚未配置模型，请先执行 opencode auth login", 401));
+        }
+        String preferredVariant = settings.defaultValueVariant();
         String variant = conversation.modelVariant();
         if (variant == null || !model.supports(variant)) {
-            String preferredVariant = settings.defaultVariant();
             if (preferredVariant != null && !preferredVariant.isBlank() && !model.supports(preferredVariant)) {
                 model = openCode.listModels().stream()
                         .filter(candidate -> candidate.enabledOrAssumed() && candidate.supports(preferredVariant))
@@ -288,8 +316,8 @@ public class ChatOrchestrator implements InboundMessageHandler {
             }
             variant = model.supports(preferredVariant) ? preferredVariant : null;
         }
-        if (variant == null && settings.defaultVariant() != null && !settings.defaultVariant().isBlank()) {
-            events.log("WARN", "当前模型不支持思考强度 " + settings.defaultVariant() + "，已使用模型默认值");
+        if (variant == null && preferredVariant != null && !preferredVariant.isBlank()) {
+            events.log("WARN", "当前模型不支持思考强度 " + preferredVariant + "，已使用模型默认值");
         }
         conversations.updateModel(conversation.conversationKey(), model.providerId(), model.id(), variant);
         return new OpenCodeModels.ModelRef(model.id(), model.providerId(), variant);

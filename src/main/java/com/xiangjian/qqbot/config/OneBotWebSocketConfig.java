@@ -1,6 +1,7 @@
 package com.xiangjian.qqbot.config;
 
 import com.xiangjian.qqbot.onebot.OneBotWebSocketHandler;
+import com.xiangjian.qqbot.service.SettingsService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
@@ -19,31 +20,32 @@ import java.util.Map;
 @EnableWebSocket
 public class OneBotWebSocketConfig implements WebSocketConfigurer {
     private final OneBotWebSocketHandler handler;
-    private final AppProperties properties;
+    private final SettingsService settings;
 
-    public OneBotWebSocketConfig(OneBotWebSocketHandler handler, AppProperties properties) {
+    public OneBotWebSocketConfig(OneBotWebSocketHandler handler, SettingsService settings) {
         this.handler = handler;
-        this.properties = properties;
+        this.settings = settings;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(handler, "/onebot/v11/ws")
-                .addInterceptors(new TokenHandshakeInterceptor(properties.onebot().token()))
+                .addInterceptors(new TokenHandshakeInterceptor(settings))
                 .setAllowedOriginPatterns("*");
     }
 
     static final class TokenHandshakeInterceptor implements HandshakeInterceptor {
-        private final String expectedToken;
+        private final SettingsService settings;
 
-        TokenHandshakeInterceptor(String expectedToken) {
-            this.expectedToken = expectedToken == null ? "" : expectedToken;
+        TokenHandshakeInterceptor(SettingsService settings) {
+            this.settings = settings;
         }
 
         @Override
         public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                        WebSocketHandler wsHandler, Map<String, Object> attributes) {
-            if (expectedToken.isBlank()) {
+            String expectedToken = settings.oneBotToken();
+            if (expectedToken == null || expectedToken.isBlank()) {
                 return true;
             }
             String authorization = request.getHeaders().getFirst("Authorization");
